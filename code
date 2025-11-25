@@ -1,0 +1,81 @@
+# weather_app.py
+import os
+import requests
+from datetime import datetime
+
+# Get API key from env var or paste directly
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY") or "YOUR_OPENWEATHERMAP_API_KEY"
+
+BASE_URL = "https://api.openweathermap.org/data/2.5/weather"
+
+def fetch_weather(city, units="metric"):
+    params = {
+        "q": city,
+        "appid": OPENWEATHER_API_KEY,
+        "units": units
+    }
+    try:
+        resp = requests.get(BASE_URL, params=params, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.exceptions.HTTPError as e:
+        # 401 -> invalid API key, 404 -> city not found
+        status = getattr(e.response, "status_code", None)
+        if status == 401:
+            print("Invalid API key. Please check your OpenWeatherMap key.")
+        elif status == 404:
+            print("City not found. Try: 'Mumbai,IN' or 'Paris,FR'.")
+        else:
+            print("HTTP error:", e)
+    except requests.exceptions.RequestException as e:
+        print("Network error:", e)
+    return None
+
+def format_weather(data):
+    if not data:
+        return "No data"
+    name = data.get("name", "Unknown")
+    sys = data.get("sys", {})
+    country = sys.get("country", "")
+    main = data.get("main", {})
+    weather = data.get("weather", [{}])[0]
+    wind = data.get("wind", {})
+    dt = datetime.fromtimestamp(data.get("dt", 0))
+    lines = [
+        f"--- Weather for {name}{', ' + country if country else ''} ---",
+        f"Time (local): {dt.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"Condition: {weather.get('main','')} - {weather.get('description','')}",
+        f"Temperature: {main.get('temp')} °C",
+        f"Feels like: {main.get('feels_like')} °C",
+        f"Humidity: {main.get('humidity')}%",
+        f"Pressure: {main.get('pressure')} hPa",
+        f"Wind: {wind.get('speed')} m/s, direction {wind.get('deg', 'N/A')}",
+    ]
+    return "\n".join(lines)
+
+def save_to_file(city, text):
+    filename = f"weather_{city.replace(',', '_').replace(' ', '_')}.txt"
+    with open(filename, "w") as f:
+        f.write(text)
+    return filename
+
+def main():
+    print("Weather Application — OpenWeatherMap")
+    if OPENWEATHER_API_KEY == "YOUR_OPENWEATHERMAP_API_KEY":
+        print("WARNING: You need to set your OpenWeatherMap API key in the script or as env var OPENWEATHER_API_KEY.")
+    city = input("Enter city (e.g. 'Bengaluru,IN' or 'London'): ").strip()
+    units_choice = input("Units: 1) Metric (C)  2) Imperial (F). Choose 1 or 2 [1]: ").strip() or "1"
+    units = "metric" if units_choice == "1" else "imperial"
+    data = fetch_weather(city, units=units)
+    if data:
+        out = format_weather(data)
+        print(out)
+        save = input("Save result to file? (y/N): ").strip().lower()
+        if save == "y":
+            fname = save_to_file(city, out)
+            print(f"Saved to {fname}")
+    else:
+        print("Failed to fetch weather. See error messages above.")
+
+if __name__ == "__main__":
+    main()
